@@ -354,6 +354,107 @@ class AudioSegment:
             return AudioSegment.from_mono_audiosegments(*corrected)
 
     # ------------------------------------------------------------------
+    # Operators
+    # ------------------------------------------------------------------
+
+    def __add__(self, other: Any) -> "AudioSegment":
+        """Concatenation (``seg1 + seg2``) or volume up (``seg + 6``)."""
+        if isinstance(other, AudioSegment):
+            # Concatenate.
+            a, b = self._sync(self, other)
+            return a._spawn(a._data + b._data)
+        if isinstance(other, (int, float)):
+            # Volume adjustment in dB.
+            return self.apply_gain(float(other))
+        return NotImplemented
+
+    def __radd__(self, other: Any) -> "AudioSegment":
+        """Support ``sum([seg1, seg2], AudioSegment.empty())``."""
+        if isinstance(other, AudioSegment):
+            return other.__add__(self)
+        if other == 0:
+            # sum() starts with 0.
+            return self
+        if isinstance(other, (int, float)):
+            return self.apply_gain(float(other))
+        return NotImplemented
+
+    def __sub__(self, other: Any) -> "AudioSegment":
+        """Volume down (``seg - 3`` = -3 dB)."""
+        if isinstance(other, (int, float)):
+            return self.apply_gain(-float(other))
+        return NotImplemented
+
+    def __mul__(self, times: int) -> "AudioSegment":
+        """Repeat segment (``seg * 3``)."""
+        if isinstance(times, int):
+            if times <= 0:
+                return self._spawn(b"")
+            return self._spawn(self._data * times)
+        return NotImplemented
+
+    def __getitem__(self, key: Any) -> "AudioSegment":
+        """Slice by milliseconds (``seg[1000:5000]``)."""
+        if isinstance(key, slice):
+            fw = self.frame_width
+            fr = self._frame_rate
+            total_ms = len(self._data) / fw / fr * 1000.0
+
+            start_ms = key.start if key.start is not None else 0
+            stop_ms = key.stop if key.stop is not None else total_ms
+
+            # Handle negative indices.
+            if start_ms < 0:
+                start_ms = total_ms + start_ms
+            if stop_ms < 0:
+                stop_ms = total_ms + stop_ms
+
+            start_ms = builtins_max(0.0, start_ms)
+            stop_ms = builtins_min(total_ms, stop_ms)
+
+            start_byte = int(start_ms / 1000.0 * fr) * fw
+            stop_byte = int(stop_ms / 1000.0 * fr) * fw
+
+            return self._spawn(self._data[start_byte:stop_byte])
+        raise TypeError(f"AudioSegment indices must be slices, not {type(key).__name__}")
+
+    def __len__(self) -> int:
+        """Duration in milliseconds."""
+        fw = self.frame_width
+        if fw == 0 or self._frame_rate == 0:
+            return 0
+        return int(len(self._data) / fw / self._frame_rate * 1000.0)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, AudioSegment):
+            return NotImplemented
+        return (
+            self._data == other._data
+            and self._sample_width == other._sample_width
+            and self._frame_rate == other._frame_rate
+            and self._channels == other._channels
+        )
+
+    def __ne__(self, other: object) -> bool:
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result  # type: ignore[return-value]
+        return not result
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        """Iterate over 1-ms chunks."""
+        fw = self.frame_width
+        fr = self._frame_rate
+        chunk_bytes = int(fr / 1000.0) * fw
+        if chunk_bytes <= 0:
+            chunk_bytes = fw
+        for i in range(0, len(self._data), chunk_bytes):
+            yield self._spawn(self._data[i : i + chunk_bytes])
+
+    def __hash__(self) -> int:
+        return hash((self._data, self._sample_width, self._frame_rate, self._channels))
+
+    # ------------------------------------------------------------------
     # Constructors
     # ------------------------------------------------------------------
 
