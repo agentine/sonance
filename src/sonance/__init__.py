@@ -2,6 +2,7 @@
 
 __version__ = "0.1.0"
 
+from sonance.audio_segment import AudioSegment
 from sonance.exceptions import (
     SonanceException,
     PydubException,
@@ -15,6 +16,7 @@ from sonance.exceptions import (
 )
 
 __all__ = [
+    "AudioSegment",
     "SonanceException",
     "PydubException",
     "TooManyMissingFrames",
