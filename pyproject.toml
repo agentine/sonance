@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sonance"
+version = "0.1.0"
+description = "A zero-dependency, modern Python replacement for pydub — works on Python 3.13+ where pydub is broken"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = []
+keywords = ["audio", "pydub", "mp3", "wav", "sound", "audioop", "audiosegment"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Sound/Audio :: Conversion",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+numpy = ["numpy"]
+dev = ["pytest>=7.0", "mypy>=1.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+strict = true
+python_version = "3.9"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sonance"]
