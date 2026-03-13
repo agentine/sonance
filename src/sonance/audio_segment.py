@@ -375,8 +375,6 @@ class AudioSegment:
         if other == 0:
             # sum() starts with 0.
             return self
-        if isinstance(other, (int, float)):
-            return self.apply_gain(float(other))
         return NotImplemented
 
     def __sub__(self, other: Any) -> "AudioSegment":

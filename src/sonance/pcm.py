@@ -132,9 +132,24 @@ def add(frag1: bytes, frag2: bytes, width: int) -> bytes:
 
 
 def bias(frag: bytes, width: int, bias_val: int) -> bytes:
-    """Add a constant *bias_val* to all samples, clamping."""
+    """Add a constant *bias_val* to all samples.
+
+    For 8-bit audio, uses modular (wrapping) arithmetic to match
+    audioop C behavior. For wider formats, clamps to range.
+    """
     _check_width(width)
     _check_frag(frag, width)
+
+    if width == 1:
+        # 8-bit: audioop uses unsigned modular arithmetic (wrapping)
+        if _HAS_NUMPY:
+            arr = np.frombuffer(frag, dtype=np.uint8).astype(np.int32)
+            arr = (arr + bias_val) & 0xFF
+            return arr.astype(np.uint8).tobytes()
+        out = bytearray()
+        for b in frag:
+            out.append((b + bias_val) & 0xFF)
+        return bytes(out)
 
     if _HAS_NUMPY and width != 3:
         return _np_bias(frag, width, bias_val)
@@ -406,7 +421,7 @@ def _array_to_frag(arr: Any, width: int) -> bytes:
 def _np_mul(frag: bytes, width: int, factor: float) -> bytes:
     arr = _frag_to_array(frag, width).astype(np.float64)
     arr *= factor
-    return _array_to_frag(arr.round().astype(np.int64), width)
+    return _array_to_frag(np.trunc(arr).astype(np.int64), width)
 
 
 def _np_add(frag1: bytes, frag2: bytes, width: int) -> bytes:
