@@ -321,7 +321,7 @@ class AudioSegment:
         samples = seg.get_array_of_samples()
         if len(samples) == 0:
             return 0.0
-        return sum(samples) / len(samples)
+        return float(sum(samples)) / len(samples)
 
     def remove_dc_offset(
         self,
@@ -436,7 +436,7 @@ class AudioSegment:
     def __ne__(self, other: object) -> bool:
         result = self.__eq__(other)
         if result is NotImplemented:
-            return result  # type: ignore[return-value]
+            return result
         return not result
 
     def __iter__(self):  # type: ignore[no-untyped-def]

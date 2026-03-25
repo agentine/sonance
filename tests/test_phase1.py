@@ -98,15 +98,19 @@ class TestPcmBias:
 
 class TestPcmLin2Lin:
     def test_16_to_8(self) -> None:
-        # 16-bit 0 → 8-bit 0 (stored as 128)
+        # 16-bit 0 → 8-bit: high byte of LE 0x0000 = 0x00
         data = struct.pack("<h", 0)
         result = lin2lin(data, 2, 1)
-        assert result == bytes([128])  # 0 + 128
+        assert result == bytes([0])
+        # 16-bit 1000 (0x03E8) → high byte = 0x03
+        data = struct.pack("<h", 1000)
+        assert lin2lin(data, 2, 1) == bytes([0x03])
 
     def test_8_to_16(self) -> None:
-        data = bytes([128 + 10])  # +10
+        # 8-bit byte 0x8A (138) → LE 16-bit [0x00, 0x8A] = 0x8A00
+        data = bytes([0x8A])
         result = lin2lin(data, 1, 2)
-        assert struct.unpack("<h", result)[0] == 10 * 256
+        assert result == b"\x00\x8a"
 
     def test_same_width(self) -> None:
         data = struct.pack("<hh", 100, 200)

@@ -11,21 +11,23 @@ automatically for ~10-100× throughput improvement on large buffers.
 
 from __future__ import annotations
 
+import importlib
 import math
 import struct
-from typing import Any, Optional, Sequence, Tuple
+from typing import Any, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Numpy acceleration (auto-detected)
 # ---------------------------------------------------------------------------
 
-try:
-    import numpy as np  # type: ignore[import-untyped]
+np: Any = None
+_HAS_NUMPY = False
 
+try:
+    np = importlib.import_module("numpy")
     _HAS_NUMPY = True
 except ImportError:
-    np = None  # type: ignore[assignment]
-    _HAS_NUMPY = False
+    pass
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,7 +69,7 @@ def _read_sample(frag: bytes, offset: int, width: int) -> int:
     if width == 1:
         return frag[offset] - 128  # unsigned → signed
     if width == 2:
-        return struct.unpack_from("<h", frag, offset)[0]
+        return int(struct.unpack_from("<h", frag, offset)[0])
     if width == 3:
         b0, b1, b2 = frag[offset], frag[offset + 1], frag[offset + 2]
         val = b0 | (b1 << 8) | (b2 << 16)
@@ -75,7 +77,7 @@ def _read_sample(frag: bytes, offset: int, width: int) -> int:
             val -= 0x1000000
         return val
     # width == 4
-    return struct.unpack_from("<i", frag, offset)[0]
+    return int(struct.unpack_from("<i", frag, offset)[0])
 
 
 def _write_sample(value: int, width: int) -> bytes:
@@ -145,7 +147,7 @@ def bias(frag: bytes, width: int, bias_val: int) -> bytes:
         if _HAS_NUMPY:
             arr = np.frombuffer(frag, dtype=np.uint8).astype(np.int32)
             arr = (arr + bias_val) & 0xFF
-            return arr.astype(np.uint8).tobytes()
+            return bytes(arr.astype(np.uint8).tobytes())
         out = bytearray()
         for b in frag:
             out.append((b + bias_val) & 0xFF)
@@ -162,7 +164,12 @@ def bias(frag: bytes, width: int, bias_val: int) -> bytes:
 
 
 def lin2lin(frag: bytes, width: int, newwidth: int) -> bytes:
-    """Convert samples from *width* to *newwidth* bytes per sample."""
+    """Convert samples from *width* to *newwidth* bytes per sample.
+
+    Uses raw byte extraction/padding to match audioop C behaviour: for
+    little-endian samples, downsizing keeps the most-significant bytes
+    and upsizing zero-pads the least-significant side.
+    """
     _check_width(width)
     _check_width(newwidth)
     _check_frag(frag, width)
@@ -171,15 +178,19 @@ def lin2lin(frag: bytes, width: int, newwidth: int) -> bytes:
         return frag
 
     out = bytearray()
-    for i in range(0, len(frag), width):
-        s = _read_sample(frag, i, width)
-        # Scale the sample value between bit depths.
-        if newwidth > width:
-            s = s << (8 * (newwidth - width))
-        else:
-            s = s >> (8 * (width - newwidth))
-        s = _clamp(s, newwidth)
-        out.extend(_write_sample(s, newwidth))
+    if newwidth < width:
+        # Downsample: keep the high (most-significant) bytes.
+        # In LE layout these are the *last* newwidth bytes of each sample.
+        skip = width - newwidth
+        for i in range(0, len(frag), width):
+            out.extend(frag[i + skip : i + width])
+    else:
+        # Upsample: zero-pad the low (least-significant) side.
+        # In LE layout, prepend zero bytes before each sample.
+        pad = b"\x00" * (newwidth - width)
+        for i in range(0, len(frag), width):
+            out.extend(pad)
+            out.extend(frag[i : i + width])
     return bytes(out)
 
 
@@ -414,8 +425,8 @@ def _array_to_frag(arr: Any, width: int) -> bytes:
     mn, mx = _MINVALS[width], _MAXVALS[width]
     arr = np.clip(arr, mn, mx)
     if width == 1:
-        return (arr + 128).astype(np.uint8).tobytes()
-    return arr.astype(np.dtype(_NP_DTYPES[width])).tobytes()
+        return bytes((arr + 128).astype(np.uint8).tobytes())
+    return bytes(arr.astype(np.dtype(_NP_DTYPES[width])).tobytes())
 
 
 def _np_mul(frag: bytes, width: int, factor: float) -> bytes:
